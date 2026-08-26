@@ -20,6 +20,7 @@ exec /usr/bin/chromium \
   --class=omarchy-grok-panel \
   --app=https://grok.com \
   --user-data-dir="$DATA" \
+  --load-extension="$DIR/no-context-menu" \
   --no-first-run \
   --no-default-browser-check \
   --disable-features=TranslateUI,Translate \
