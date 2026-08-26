@@ -1,0 +1,43 @@
+.query-bar textarea {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  vertical-align: middle !important;
+}
+
+button[aria-label="Toggle sidebar"],
+a[aria-label="Open Grok Bot"],
+a[aria-label="Switch to Private Chat"],
+[aria-label="Share project" i],
+[aria-label="Share Project" i],
+[aria-label="Toggle canvas" i],
+[aria-label="Toggle Canvas" i],
+[aria-label="Open canvas" i],
+[aria-label="Close canvas" i],
+[title="Share project" i],
+[title="Toggle canvas" i] {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+#ot-sdk-btn,
+#onetrust-consent-sdk,
+#onetrust-banner-sdk,
+#onetrust-pc-sdk,
+#onetrust-pc-btn-handler,
+.ot-sdk-container,
+.ot-sdk-show-settings,
+button.ot-sdk-show-settings {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}

@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Grok panel: no context menu",
+  "version": "1.9.0",
+  "host_permissions": [
+    "http://127.0.0.1:18765/*",
+    "https://grok.com/*",
+    "https://*.grok.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://grok.com/*",
+        "https://*.grok.com/*",
+        "https://accounts.x.ai/*",
+        "https://*.x.ai/*",
+        "https://x.com/*",
+        "https://*.x.com/*",
+        "https://twitter.com/*",
+        "https://*.twitter.com/*",
+        "https://cdn.cookielaw.org/*",
+        "https://*.onetrust.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["hide.css"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://grok.com/*",
+        "https://*.grok.com/*"
+      ],
+      "js": ["api.js"],
+      "run_at": "document_idle",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ]
+}
