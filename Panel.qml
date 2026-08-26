@@ -208,6 +208,14 @@ Item {
     placeProc.running = true
   }
 
+  function syncFullscreen() {
+    if (!root.pluginDir) return
+    fsProc.command = [root.pluginDir + "/webview/constrain-fullscreen.py",
+                      root.opened ? "constrain" : "restore", String(root.screenName || "")]
+    fsProc.running = false
+    fsProc.running = true
+  }
+
   function normalizeChatUrl(value) {
     var s = String(value || "").trim()
     if (!s) return ""
@@ -414,11 +422,15 @@ Item {
       placeRetry.running = false
       root.placeWeb("hide")
     }
+    fsDebounce.restart()
   }
 
   onSideChanged: if (root.opened) root.placeWeb("show")
   onPanelWidthChanged: if (root.opened && !root.resizing) root.placeWeb("show")
-  onScreenNameChanged: if (root.opened) root.placeWeb("show")
+  onScreenNameChanged: if (root.opened) {
+    root.placeWeb("show")
+    fsDebounce.restart()
+  }
 
   Process {
     id: webProc
@@ -481,6 +493,29 @@ Item {
   Process {
     id: placeProc
     command: ["true"]
+  }
+
+  Process {
+    id: fsProc
+    command: ["true"]
+  }
+
+  Timer {
+    id: fsDebounce
+    interval: 80
+    repeat: false
+    onTriggered: root.syncFullscreen()
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!event) return
+      var n = String(event.name || "")
+      if (n === "fullscreen" || n === "openwindow" || n === "closewindow"
+          || n === "movewindow" || n === "movewindowv2" || n === "changefloatingmode")
+        fsDebounce.restart()
+    }
   }
 
   Timer {
