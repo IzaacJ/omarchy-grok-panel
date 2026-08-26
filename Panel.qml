@@ -23,6 +23,8 @@ Item {
   readonly property int maxWidth: 900
   readonly property int handleWidth: 8
 
+  readonly property string pluginDir: String((root.manifest && root.manifest.__sourceDir) || "")
+
   readonly property var targetScreen: {
     var want = String(root.screenName || "")
     var focused = focusedScreenName()
@@ -44,6 +46,7 @@ Item {
       var n = Math.round(Number(settings.width))
       if (isFinite(n) && n > 0) root.panelWidth = n
     }
+    if (root.opened) root.placeWeb("show")
   }
 
   function focusedScreenName() {
@@ -71,13 +74,19 @@ Item {
   function open() {
     if (!root.screenName) root.screenName = focusedScreenName()
     root.opened = true
+    root.ensureWeb()
+    root.placeWeb("show")
   }
 
-  function close() { root.opened = false }
+  function close() {
+    root.opened = false
+    root.placeWeb("hide")
+  }
   function toggle() { root.opened ? close() : open() }
 
   function cycleSide() {
     root.side = root.side === "right" ? "left" : "right"
+    if (root.opened) root.placeWeb("show")
   }
 
   function clampWidth(value) {
@@ -105,8 +114,16 @@ Item {
     return root.targetScreen ? root.targetScreen.width : 1920
   }
 
-  // hyprctl cursorpos is compositor layout X. Window-local mouse X moves with
-  // exclusiveZone, so it cannot be used as a drag delta.
+  function barReserve() {
+    var mon = hyprMonitor()
+    try {
+      var r = mon && mon.lastIpcObject ? mon.lastIpcObject.reserved : null
+      var top = r ? Number(r[1]) : 0
+      if (isFinite(top) && top > 0) return Math.round(top)
+    } catch (e) {}
+    return 24
+  }
+
   function widthForCursorX(cursorX) {
     if (root.side === "right")
       return clampWidth((dockX() + dockWidth()) - cursorX + root.resizeGrabX)
@@ -119,7 +136,67 @@ Item {
     try { pos = JSON.parse(String(text || "")) } catch (e) { return }
     var x = Number(pos && pos.x)
     if (!isFinite(x)) return
-    root.panelWidth = root.widthForCursorX(x)
+    var next = root.widthForCursorX(x)
+    if (next !== root.panelWidth) {
+      root.panelWidth = next
+      root.placeWeb("show")
+    }
+  }
+
+  function ensureWeb() {
+    if (!root.pluginDir) return
+    webProc.command = [root.pluginDir + "/webview/launch.sh"]
+    if (!webProc.running) webProc.running = true
+  }
+
+  function placeWeb(mode) {
+    if (!root.pluginDir) return
+    placeProc.command = [root.pluginDir + "/webview/place.sh", mode || (root.opened ? "show" : "hide"),
+                         String(root.screenName || ""), root.side, String(root.panelWidth)]
+    placeProc.running = false
+    placeProc.running = true
+  }
+
+  onManifestChanged: if (root.pluginDir) root.ensureWeb()
+  Component.onDestruction: {
+    webProc.running = false
+  }
+
+  onOpenedChanged: {
+    if (root.opened) {
+      root.ensureWeb()
+      placeRetry.tries = 0
+      placeRetry.running = true
+    } else {
+      placeRetry.running = false
+      root.placeWeb("hide")
+    }
+  }
+
+  onSideChanged: if (root.opened) root.placeWeb("show")
+  onPanelWidthChanged: if (root.opened && !root.resizing) root.placeWeb("show")
+  onScreenNameChanged: if (root.opened) root.placeWeb("show")
+
+  Process {
+    id: webProc
+    command: ["true"]
+  }
+
+  Process {
+    id: placeProc
+    command: ["true"]
+  }
+
+  Timer {
+    id: placeRetry
+    interval: 150
+    repeat: true
+    property int tries: 0
+    onTriggered: {
+      tries += 1
+      root.placeWeb("show")
+      if (tries >= 20) running = false
+    }
   }
 
   Process {
@@ -145,15 +222,46 @@ Item {
     function state(): string { return root.opened ? "open" : "closed" }
   }
 
+  // 1px Top-layer exclusive-zone request. A full-width Top surface covered
+  // grok.com; a Bottom exclusive zone also inset the Omarchy bar.
   PanelWindow {
     id: window
     screen: root.targetScreen
     visible: root.opened
-    implicitWidth: root.panelWidth
-    color: Color.popups.background
+    implicitWidth: 1
+    color: Qt.rgba(0, 0, 0, 0)
+    surfaceFormat.opaque: false
     exclusiveZone: root.opened ? root.panelWidth : 0
     exclusionMode: ExclusionMode.Normal
+    aboveWindows: true
     WlrLayershell.namespace: "omarchy-grok"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    mask: Region {}
+
+    anchors {
+      top: true
+      bottom: true
+      left: root.side === "left"
+      right: root.side === "right"
+    }
+
+    margins {
+      top: root.barReserve()
+    }
+  }
+
+  PanelWindow {
+    id: handleWindow
+    screen: root.targetScreen
+    visible: root.opened
+    implicitWidth: root.handleWidth
+    color: "transparent"
+    surfaceFormat.opaque: false
+    exclusiveZone: 0
+    exclusionMode: ExclusionMode.Ignore
+    aboveWindows: true
+    WlrLayershell.namespace: "omarchy-grok-handle"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
@@ -164,47 +272,31 @@ Item {
       right: root.side === "right"
     }
 
-    Item {
-      id: content
+    margins {
+      top: root.barReserve()
+    }
+
+    Rectangle {
+      id: resizeHandle
       anchors.fill: parent
+      color: "#ff0000"
 
-      Text {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Style.space(16) + (root.side === "right" ? root.handleWidth : 0)
-        anchors.rightMargin: Style.space(16) + (root.side === "left" ? root.handleWidth : 0)
-        text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-        color: Color.popups.text
-        font.family: Style.font.family
-        font.pixelSize: Math.max(12, Style.font.body)
-        wrapMode: Text.Wrap
-        horizontalAlignment: Text.AlignHCenter
-      }
+      MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.SizeHorCursor
+        preventStealing: true
 
-      Rectangle {
-        id: resizeHandle
-        z: 10
-        width: root.handleWidth
-        height: parent.height
-        y: 0
-        x: root.side === "right" ? 0 : parent.width - width
-        color: "#ff0000"
-
-        MouseArea {
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.SizeHorCursor
-          preventStealing: true
-
-          onPressed: function(mouse) {
-            root.resizeGrabX = mouse.x
-            root.resizing = true
-            cursorProbe.running = true
-          }
-          onReleased: root.resizing = false
-          onCanceled: root.resizing = false
+        onPressed: function(mouse) {
+          root.resizeGrabX = mouse.x
+          root.resizing = true
+          cursorProbe.running = true
         }
+        onReleased: {
+          root.resizing = false
+          if (root.opened) root.placeWeb("show")
+        }
+        onCanceled: root.resizing = false
       }
     }
   }

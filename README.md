@@ -5,7 +5,9 @@ An [Omarchy](https://omarchy.org/) shell plugin that docks a full-height side pa
 Plugin id: `online.izz0.omarchy.grok-panel`  
 Bar label: **Grok**
 
-The shell, bar button, docking, and live resize are in place. Panel content is still a placeholder; a persistent Grok chat is the next step.
+The **Grok** bar button lives in omarchy-shell. The docked strip (exclusive zone + resize handle) is a layer-shell surface. **grok.com** runs in a separate `qml6` window with Qt WebEngine so Chromium is not loaded inside the bar process (Quickshell fatals if it hosts WebEngine).
+
+Login cookies stay under `~/.local/share/online.izz0.omarchy.grok-panel/` and `~/.cache/online.izz0.omarchy.grok-panel/`.
 
 ## Install
 
@@ -68,6 +70,12 @@ omarchy-shell online.izz0.omarchy.grok-panel open
 omarchy-shell online.izz0.omarchy.grok-panel close
 omarchy-shell online.izz0.omarchy.grok-panel state
 ```
+
+## Requirements
+
+- Omarchy / `omarchy-shell`
+- `qt6-webengine` and `qml6` (from `qt6-declarative`)
+- Hyprland (`hyprctl`) to size the grok.com window into the reserved strip
 
 ## Remove
 
