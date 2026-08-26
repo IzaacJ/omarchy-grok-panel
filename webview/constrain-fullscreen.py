@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""While the panel is open, covering SUPER+F fullscreen would paint under
-the layer-shell chrome and the pinned Chromium sidecar. Convert covering
-fullscreen on the panel's monitor into Omarchy tiled fullscreen (internal
-none, client fullscreen) so the window fills the remaining work area.
-Restore covering fullscreen when the panel closes."""
+"""While the panel is open, covering SUPER+F fullscreen paints under the
+layer-shell chrome and the pinned Chromium sidecar.
+
+Hyprland's fullscreen_state defaults to toggle. SUPER+F already sets client
+fullscreen to 2, so dispatching internal=0 client=2 toggled it back to a
+normal tile. Use action=set and compositor maximize (internal=1), which fills
+the working area and keeps exclusive-zone margins.
+"""
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "constrain"
 SCREEN_NAME = sys.argv[2] if len(sys.argv) > 2 else ""
 CLASS = "omarchy-grok-panel"
 STATE = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "omarchy-grok-panel.fs-converted"
+TOGGLE_GRACE = 0.6
 
 
 def hypr_json(args):
     return json.loads(subprocess.check_output(["hyprctl"] + args))
 
 
-def eval_lua(code, required=True):
+def eval_lua(code):
     r = subprocess.run(["hyprctl", "eval", code], capture_output=True, text=True)
-    if required and r.returncode != 0:
-        sys.stderr.write(r.stderr or r.stdout or "hyprctl eval failed\n")
-        r.check_returncode()
     return r.returncode == 0
 
 
@@ -37,25 +39,32 @@ def set_fs(address, internal, client):
         "  if cand.address == want then w = cand break end\n"
         "end\n"
         "if not w then return end\n"
-        "hl.dispatch(hl.dsp.window.fullscreen_state({ internal = %d, client = %d, window = w }))\n"
-        % (addr, int(internal), int(client)),
-        required=False,
+        "hl.dispatch(hl.dsp.window.fullscreen_state({\n"
+        "  internal = %d, client = %d, action = \"set\", window = w\n"
+        "}))\n"
+        % (addr, int(internal), int(client))
     )
 
 
-def covering(fs):
+def as_int(value):
     try:
-        n = int(fs)
+        return int(value)
     except (TypeError, ValueError):
-        return False
-    return n == 2 or n == 3
+        return 0
 
 
-def tiled_client(fs_client):
-    try:
-        return int(fs_client) == 2
-    except (TypeError, ValueError):
-        return False
+def covering(c):
+    return as_int(c.get("fullscreen")) in (2, 3)
+
+
+def constrained(c):
+    internal = as_int(c.get("fullscreen"))
+    client = as_int(c.get("fullscreenClient"))
+    return internal == 1 or (internal == 0 and client == 2)
+
+
+def idle(c):
+    return as_int(c.get("fullscreen")) == 0 and as_int(c.get("fullscreenClient")) == 0
 
 
 def monitor_id(name):
@@ -72,16 +81,27 @@ def monitor_id(name):
 
 def load_converted():
     if not STATE.exists():
-        return []
+        return {}
     try:
-        data = json.loads(STATE.read_text(encoding="utf-8") or "[]")
-        return [str(x) for x in data] if isinstance(data, list) else []
+        data = json.loads(STATE.read_text(encoding="utf-8") or "{}")
     except json.JSONDecodeError:
-        return []
+        return {}
+    if isinstance(data, list):
+        now = time.time()
+        return {str(x): now for x in data}
+    if isinstance(data, dict):
+        out = {}
+        for key, val in data.items():
+            try:
+                out[str(key)] = float(val)
+            except (TypeError, ValueError):
+                out[str(key)] = 0.0
+        return out
+    return {}
 
 
-def save_converted(addrs):
-    STATE.write_text(json.dumps(addrs) + "\n", encoding="utf-8")
+def save_converted(mapping):
+    STATE.write_text(json.dumps(mapping) + "\n", encoding="utf-8")
 
 
 def is_panel(c):
@@ -93,27 +113,24 @@ def is_panel(c):
 def main():
     mon = monitor_id(SCREEN_NAME)
     converted = load_converted()
+    now = time.time()
     if MODE != "constrain":
-        still = []
-        for addr in converted:
+        for addr, _ts in list(converted.items()):
             found = None
             for c in hypr_json(["clients", "-j"]):
                 if c.get("address") == addr:
                     found = c
                     break
-            if not found:
+            if not found or idle(found) or covering(found):
                 continue
-            if covering(found.get("fullscreen")):
-                continue
-            if tiled_client(found.get("fullscreenClient")):
+            if constrained(found):
                 set_fs(addr, 2, 2)
-            still.append(addr)
-        save_converted([])
+        save_converted({})
         return
 
     if mon is None:
         return
-    keep = []
+    keep = {}
     for c in hypr_json(["clients", "-j"]):
         if is_panel(c):
             continue
@@ -122,12 +139,16 @@ def main():
         addr = str(c.get("address") or "")
         if not addr:
             continue
-        if covering(c.get("fullscreen")):
-            if set_fs(addr, 0, 2):
-                keep.append(addr)
+        last = converted.get(addr)
+        if covering(c):
+            if last is not None and now - last > TOGGLE_GRACE:
+                set_fs(addr, 0, 0)
+                continue
+            if set_fs(addr, 1, 2):
+                keep[addr] = last if last is not None else now
             continue
-        if addr in converted and tiled_client(c.get("fullscreenClient")):
-            keep.append(addr)
+        if last is not None and constrained(c):
+            keep[addr] = last
     save_converted(keep)
 
 
