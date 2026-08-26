@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "online.izz0.omarchy.grok-panel",
+  "name": "Grok",
+  "version": "0.2.0",
+  "author": "izaac",
+  "license": "MIT",
+  "description": "Full-height side panel that docks to the left or right of a monitor.",
+  "kinds": ["service", "bar-widget"],
+  "entryPoints": {
+    "service": "Panel.qml",
+    "barWidget": "BarButton.qml"
+  },
+  "barWidget": {
+    "displayName": "Grok",
+    "description": "Left click toggles the panel. Right click switches side.",
+    "category": "AI",
+    "aliases": ["grok", "panel"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "side": "right",
+      "width": 420
+    }
+  }
+}
