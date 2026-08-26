@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# place.sh show|hide <screenName> <side> <width>
+# place.sh show|hide <screenName> <side> <width> [topExtra]
 MODE=${1:-hide}
 SCREEN_NAME=${2:-}
 SIDE=${3:-right}
 WIDTH=${4:-420}
+TOP_EXTRA=${5:-0}
 
-python3 - "$MODE" "$SCREEN_NAME" "$SIDE" "$WIDTH" <<'PY'
+python3 - "$MODE" "$SCREEN_NAME" "$SIDE" "$WIDTH" "$TOP_EXTRA" <<'PY'
 import json, subprocess, sys, time
 
 mode, screen_name, side, width_s = sys.argv[1:5]
 width = int(width_s)
+top_extra = int(sys.argv[5]) if len(sys.argv) > 5 else 0
 CLASS = "omarchy-grok-panel"
 TITLE = "omarchy-grok-panel"
 
@@ -57,8 +59,8 @@ top = int(reserved[1] or 0)
 bottom = int(reserved[3] or 0)
 mx, my = int(mon["x"]), int(mon["y"])
 mw, mh = int(mon["width"]), int(mon["height"])
-h = max(1, mh - top - bottom)
-y = my + top
+h = max(1, mh - top - bottom - top_extra)
+y = my + top + top_extra
 x = mx + mw - width if side == "right" else mx
 
 eval_lua(
@@ -104,4 +106,36 @@ eval_lua(
     "hl.dispatch(hl.dsp.window.move({ x = %d, y = %d, relative = false, window = w }))\n"
     % (CLASS, TITLE, width, h, x, y)
 )
+
+def is_auth_window(c):
+    title = str(c.get("title") or "").lower()
+    cls = str(c.get("class") or "").lower()
+    if c.get("class") == CLASS and str(c.get("title") or "") in ("Grok", TITLE):
+        return False
+    blob = title + " " + cls
+    return any(k in blob for k in (
+        "sign in", "log in", "login", "authorize", "x.com", "twitter",
+        "accounts.x.ai", "auth",
+    ))
+
+main_pid = None
+for c in hypr_json(["clients", "-j"]):
+    if c.get("class") == CLASS or c.get("title") in ("Grok", TITLE):
+        main_pid = c.get("pid")
+        break
+if main_pid:
+    for c in hypr_json(["clients", "-j"]):
+        if c.get("pid") != main_pid:
+            continue
+        if not is_auth_window(c):
+            continue
+        eval_lua(
+            "local w = hl.get_windows({ title = %s })[1]\n"
+            "if not w then return end\n"
+            "hl.dispatch(hl.dsp.window.float({ action = \"on\", window = w }))\n"
+            "hl.dispatch(hl.dsp.window.center({ window = w }))\n"
+            "hl.dispatch(hl.dsp.window.bring_to_top({ window = w }))\n"
+            % json.dumps(c.get("title") or ""),
+            required=False,
+        )
 PY
