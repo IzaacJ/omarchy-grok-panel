@@ -397,6 +397,13 @@ function describeCurrent(chats) {
   return { href: href, title: title, section: section }
 }
 
+function bridgeHeaders(extra) {
+  var headers = extra ? Object.assign({}, extra) : {}
+  if (typeof GROK_PANEL_BRIDGE_TOKEN === "string" && GROK_PANEL_BRIDGE_TOKEN)
+    headers.Authorization = "Bearer " + GROK_PANEL_BRIDGE_TOKEN
+  return headers
+}
+
 function postChatState(chats, extra) {
   var current = describeCurrent(chats)
   var payload = {
@@ -412,7 +419,7 @@ function postChatState(chats, extra) {
   }
   fetch("http://127.0.0.1:18765/state", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: bridgeHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   }).catch(function () {})
 }
@@ -438,7 +445,7 @@ function reportChats(force) {
 
 function pollRefresh() {
   if (window.top !== window) return
-  fetch("http://127.0.0.1:18765/refresh")
+  fetch("http://127.0.0.1:18765/refresh", { headers: bridgeHeaders() })
     .then(function (res) { return res.text() })
     .then(function (text) {
       if (String(text || "").trim() === "1") {

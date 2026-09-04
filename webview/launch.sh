@@ -20,6 +20,38 @@ if [[ -f "$PIDFILE" ]]; then
   fi
 fi
 echo $$ > "$PIDFILE"
+RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
+TOKEN_FILE="$RUNTIME/omarchy-grok-panel.bridge.token"
+EXT_DST="$RUNTIME/omarchy-grok-panel.ext"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if [[ -s "$TOKEN_FILE" ]]; then
+    break
+  fi
+  sleep 0.05
+done
+if [[ -L "$EXT_DST" ]]; then
+  rm -f "$EXT_DST"
+fi
+rm -rf "$EXT_DST"
+mkdir -p "$EXT_DST"
+cp -a "$DIR/no-context-menu/." "$EXT_DST/"
+python3 - "$TOKEN_FILE" "$EXT_DST/token.js" <<'PY'
+import json, os, stat, sys
+token_path, dest = sys.argv[1], sys.argv[2]
+token = ""
+try:
+    fd = os.open(token_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        st = os.fstat(fd)
+        if stat.S_ISREG(st.st_mode):
+            token = os.read(fd, 256).decode("ascii", "strict").strip()
+    finally:
+        os.close(fd)
+except OSError:
+    pass
+with open(dest, "w", encoding="utf-8") as fh:
+    fh.write("var GROK_PANEL_BRIDGE_TOKEN = %s;\n" % json.dumps(token))
+PY
 # Chromium --app paints grok.com; Qt WebEngine on Wayland stayed black even
 # though view-source showed the document. X11/XWayland keeps a stable WM_CLASS
 # for placement.
@@ -28,7 +60,7 @@ exec /usr/bin/chromium \
   --class=omarchy-grok-panel \
   --app="$URL" \
   --user-data-dir="$DATA" \
-  --load-extension="$DIR/no-context-menu" \
+  --load-extension="$EXT_DST" \
   --no-first-run \
   --no-default-browser-check \
   --disable-popup-blocking \
