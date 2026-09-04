@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "online.izz0.omarchy.grok-panel",
   "name": "Grok",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "izaac",
   "license": "MIT",
   "description": "Full-height side panel that docks to the left or right of a monitor.",
