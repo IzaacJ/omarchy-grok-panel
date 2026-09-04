@@ -617,8 +617,10 @@ Item {
 
     Rectangle {
       id: resizeHandle
-      anchors.fill: parent
-      color: "#ff0000"
+      width: 2
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      color: Color.popups.border
 
       MouseArea {
         anchors.fill: parent
