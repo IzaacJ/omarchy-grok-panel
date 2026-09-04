@@ -39,7 +39,10 @@ BarWidget {
 
   Component.onCompleted: {
     var service = ensureHost()
-    if (service) service.applySettings(root.settings)
+    if (!service) return
+    service.applySettings(root.settings)
+    if (typeof service.shortcutScript === "function")
+      service.shortcutScript("bind")
   }
 
   BarIconButton {

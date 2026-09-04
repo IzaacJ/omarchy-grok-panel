@@ -415,8 +415,24 @@ Item {
     } catch (e) {}
   }
 
-  onManifestChanged: if (root.pluginDir) root.ensureWeb()
+  function shortcutScript() {
+    if (!root.pluginDir) return
+    var args = ["python3", root.pluginDir + "/webview/bind-shortcut.py"]
+    for (var i = 0; i < arguments.length; i++) args.push(arguments[i])
+    if (arguments[0] === "unbind")
+      Quickshell.execDetached(args)
+    else
+      shortcutProc.exec(args)
+  }
+
+  onManifestChanged: if (root.pluginDir) {
+    root.ensureWeb()
+    root.shortcutScript("bind")
+  }
+  onPluginDirChanged: if (root.pluginDir) root.shortcutScript("bind")
+  Component.onCompleted: if (root.pluginDir) root.shortcutScript("bind")
   Component.onDestruction: {
+    root.shortcutScript("unbind", "--delay")
     webProc.running = false
     bridgeProc.running = false
   }
@@ -461,6 +477,11 @@ Item {
 
   Process {
     id: saveDefaultProc
+    command: ["true"]
+  }
+
+  Process {
+    id: shortcutProc
     command: ["true"]
   }
 
@@ -520,6 +541,8 @@ Item {
     function onRawEvent(event) {
       if (!event) return
       var n = String(event.name || "")
+      if (n === "configreloaded")
+        root.shortcutScript("bind")
       if (n === "fullscreen" || n === "openwindow" || n === "closewindow"
           || n === "movewindow" || n === "movewindowv2" || n === "changefloatingmode")
         fsDebounce.restart()

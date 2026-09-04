@@ -41,6 +41,7 @@ The plugin folder name must match the id.
 | Action | Result |
 | --- | --- |
 | Left click **Grok** on the bar | Open or close the panel on that monitor |
+| SUPER + CTRL + G | Open or close the panel |
 | Right click **Grok** | Dock to the opposite side (left ↔ right) |
 | Drag the inner red edge | Resize width |
 | Click the native title bar | Open or close the chat list |
@@ -78,6 +79,8 @@ Pinned default (and optional project name) is stored in:
 ```
 
 ## Commands
+
+The plugin registers **SUPER + CTRL + G** while it is enabled, unless that key is already bound. Override it in `~/.config/hypr/bindings.lua` if you want a different key.
 
 ```bash
 omarchy-shell online.izz0.omarchy.grok-panel toggle
