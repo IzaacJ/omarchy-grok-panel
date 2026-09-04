@@ -24,7 +24,15 @@ Item {
   readonly property int minWidth: 280
   readonly property int maxWidth: 900
   readonly property int handleWidth: 8
+  readonly property int borderWidth: 2
   readonly property int toolbarHeight: 32
+  readonly property bool panelFocused: {
+    if (root.pickerOpen || root.resizing) return true
+    var t = Hyprland.activeToplevel
+    if (!t) return false
+    var ipc = t.lastIpcObject || {}
+    return String(ipc["class"] || ipc.initialClass || "") === "omarchy-grok-panel"
+  }
   readonly property string pinOutline: "󰤱"
   readonly property string pinFilled: "󰐃"
   readonly property string refreshIcon: "󰑓"
@@ -597,7 +605,7 @@ Item {
     implicitWidth: root.handleWidth
     color: "transparent"
     surfaceFormat.opaque: false
-    exclusiveZone: 0
+    exclusiveZone: -1
     exclusionMode: ExclusionMode.Normal
     aboveWindows: true
     WlrLayershell.namespace: "omarchy-grok-handle"
@@ -612,31 +620,39 @@ Item {
     }
 
     margins {
-      top: root.toolbarHeight
+      top: root.barReserve()
+      left: root.side === "left" ? root.panelWidth - root.handleWidth : 0
+      right: root.side === "right" ? root.panelWidth - root.handleWidth : 0
     }
 
     Rectangle {
       id: resizeHandle
+      width: root.borderWidth
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      anchors.left: root.side === "right" ? parent.left : undefined
+      anchors.right: root.side === "left" ? parent.right : undefined
+      color: root.panelFocused ? Color.popups.border : Util.alpha(Color.muted, 0.67)
+
+      Behavior on color { ColorAnimation { duration: 120 } }
+    }
+
+    MouseArea {
       anchors.fill: parent
-      color: "#ff0000"
+      hoverEnabled: true
+      cursorShape: Qt.SizeHorCursor
+      preventStealing: true
 
-      MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.SizeHorCursor
-        preventStealing: true
-
-        onPressed: function(mouse) {
-          root.resizeGrabX = mouse.x
-          root.resizing = true
-          cursorProbe.running = true
-        }
-        onReleased: {
-          root.resizing = false
-          if (root.opened) root.placeWeb("show")
-        }
-        onCanceled: root.resizing = false
+      onPressed: function(mouse) {
+        root.resizeGrabX = mouse.x
+        root.resizing = true
+        cursorProbe.running = true
       }
+      onReleased: {
+        root.resizing = false
+        if (root.opened) root.placeWeb("show")
+      }
+      onCanceled: root.resizing = false
     }
   }
 
