@@ -7,6 +7,8 @@ document.addEventListener(
   true
 )
 
+var NAME_LIMIT = 80
+var FIELD_LIMIT = 512
 var DISCLAIMER = /by messaging grok|your privacy choices/i
 var HEADER_CHROME = /^(toggle sidebar|open grok bot|switch to private chat|share project|toggle canvas)$/i
 var PROJECT_CHROME = /share project|toggle canvas|open canvas|close canvas|show canvas|hide canvas/i
@@ -287,16 +289,28 @@ function maybeSignIn() {
   btn.click()
 }
 
+function clipName(value) {
+  var text = String(value || "").replace(/\s+/g, " ").trim()
+  if (text.length <= NAME_LIMIT) return text
+  return text.slice(0, NAME_LIMIT - 1) + "…"
+}
+
+function boundField(value) {
+  var text = String(value || "").trim()
+  if (text.length <= FIELD_LIMIT) return text
+  return text.slice(0, FIELD_LIMIT)
+}
+
 function addChat(chats, seen, id, title, url, extra) {
   if (!id || id === "private" || seen[id]) return
   seen[id] = true
-  title = String(title || "").replace(/\s+/g, " ").trim()
+  title = clipName(title)
   if (!title) title = "Chat " + String(id).replace(/^project:/, "").slice(0, 8)
-  if (title.length > 80) title = title.slice(0, 79) + "…"
-  var row = { id: id, title: title, url: url || ("https://grok.com/c/" + id) }
+  var row = { id: boundField(id), title: title, url: boundField(url || ("https://grok.com/c/" + id)) }
   if (extra) {
-    if (extra.section) row.section = extra.section
-    if (extra.workspaceId) row.workspaceId = extra.workspaceId
+    var section = clipName(extra.section)
+    if (section) row.section = section
+    if (extra.workspaceId) row.workspaceId = boundField(extra.workspaceId)
   }
   chats.push(row)
 }
@@ -313,7 +327,7 @@ window.addEventListener("message", function (event) {
   var list = event.data.chats || []
   lastApiAt = Date.now()
   lastApiChats = list
-  lastPreferredProject = event.data.preferredProject || null
+  lastPreferredProject = clipProject(event.data.preferredProject)
   apiRequested = false
   var waiters = apiWaiters
   apiWaiters = []
@@ -394,7 +408,22 @@ function describeCurrent(chats) {
   }
   if (!title && page.projectId) title = "New chat in project"
   if (!title) title = "New chat"
-  return { href: href, title: title, section: section }
+  return { href: boundField(href), title: clipName(title), section: clipName(section) }
+}
+
+function clipProject(project) {
+  if (!project || typeof project !== "object") return null
+  var url = boundField(project.url)
+  if (!url) return null
+  var row = {
+    id: boundField(project.id),
+    title: clipName(project.title),
+    url: url,
+    workspaceId: boundField(project.workspaceId)
+  }
+  var section = clipName(project.section)
+  if (section) row.section = section
+  return row
 }
 
 function bridgeHeaders(extra) {

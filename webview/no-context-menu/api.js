@@ -26,11 +26,18 @@
     return String(obj.conversationId || obj.conversation_id || obj.id || "").trim()
   }
 
+  var NAME_LIMIT = 80
+
+  function clipName(value) {
+    var text = String(value || "").replace(/\s+/g, " ").trim()
+    if (text.length <= NAME_LIMIT) return text
+    return text.slice(0, NAME_LIMIT - 1) + "…"
+  }
+
   function recTitle(obj) {
     obj = rec(obj)
     if (!obj) return ""
-    return String(obj.title || obj.name || obj.conversationTitle || obj.displayName || "")
-      .replace(/\s+/g, " ").trim()
+    return clipName(obj.title || obj.name || obj.conversationTitle || obj.displayName || "")
   }
 
   function recWorkspace(obj) {
@@ -115,10 +122,10 @@
 
   function newChatInProject(project) {
     var id = String(project.workspaceId || "").trim()
-    var name = String(project.title || "project").trim() || "project"
+    var name = clipName(project.title) || "project"
     return {
       id: "new:" + id,
-      title: "New chat in " + name,
+      title: clipName("New chat in " + name),
       url: "https://grok.com/project/" + id,
       workspaceId: id,
       section: name
@@ -148,10 +155,10 @@
           seen[item.id] = true
           chats.push({
             id: item.id,
-            title: item.title,
+            title: clipName(item.title),
             url: item.url,
             workspaceId: item.workspaceId || "",
-            section: section || item.section || ""
+            section: clipName(section || item.section || "")
           })
         }
 

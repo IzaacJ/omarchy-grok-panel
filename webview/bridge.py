@@ -12,6 +12,8 @@ from pathlib import Path
 
 PORT = 18765
 MAX_BODY = 1 << 20
+NAME_LIMIT = 80
+FIELD_LIMIT = 512
 ALLOWED_ORIGIN = re.compile(r"^https://([a-z0-9-]+\.)*grok\.com$")
 ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 TOKEN_BYTES = 256
@@ -161,6 +163,74 @@ def take_regular(path):
         os.close(dir_fd)
 
 
+def clip_name(value, limit=NAME_LIMIT):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def bound_field(value, limit=FIELD_LIMIT):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit]
+
+
+def _sanitize_record(record):
+    if not isinstance(record, dict):
+        return None
+    out = {}
+    for key, value in record.items():
+        if not isinstance(key, str) or len(key) > 64:
+            continue
+        if key in ("title", "section"):
+            out[key] = clip_name(value)
+        elif isinstance(value, str):
+            out[key] = bound_field(value)
+        elif isinstance(value, (int, float, bool)) or value is None:
+            out[key] = value
+    return out
+
+
+def sanitize_chat_state(data):
+    if not isinstance(data, dict):
+        return data
+    out = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or len(key) > 64:
+            continue
+        if key in ("currentTitle", "currentSection"):
+            out[key] = clip_name(value)
+        elif key == "chats" and isinstance(value, list):
+            rows = []
+            for item in value:
+                row = _sanitize_record(item)
+                if row:
+                    rows.append(row)
+            out[key] = rows
+        elif key == "preferredProject":
+            if isinstance(value, dict):
+                row = _sanitize_record(value)
+                if row:
+                    out[key] = row
+            elif value is None:
+                out[key] = None
+        elif isinstance(value, str):
+            out[key] = bound_field(value)
+        elif isinstance(value, (int, float, bool)) or value is None:
+            out[key] = value
+    return out
+
+
 def take_pidfile():
     if PIDFILE.exists():
         try:
@@ -306,6 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 self._send(400, origin)
                 return
+            data = sanitize_chat_state(data)
             payload = (json.dumps(data, indent=2) + "\n").encode("utf-8")
             if len(payload) > MAX_BODY * 2:
                 self._send(413, origin)
