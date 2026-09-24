@@ -52,7 +52,18 @@ Item {
   property bool autoDefaultApplied: false
   property var preferredProject: null
 
-  readonly property string pluginDir: String((root.manifest && root.manifest.__sourceDir) || "")
+  // Third-party manifests arrive without __sourceDir, so the directory has to
+  // come from this file. Both the symlink install and a real checkout work.
+  readonly property string pluginDir: {
+    var fromManifest = String((root.manifest && root.manifest.__sourceDir) || "")
+    if (fromManifest) return fromManifest
+    var raw = String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "").replace(/\/$/, "")
+    try {
+      return decodeURIComponent(raw)
+    } catch (e) {
+      return raw
+    }
+  }
   readonly property string dataDir: (Quickshell.env("XDG_DATA_HOME") || (Quickshell.env("HOME") + "/.local/share"))
                                     + "/online.izz0.omarchy.grok-panel"
 
