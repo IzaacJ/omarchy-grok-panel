@@ -190,6 +190,84 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertFalse((self.state / "chats.json").exists())
 
+    def test_remote_names_are_clipped_before_save(self):
+        markup = "<img src='https://evil.example/x.png'>"
+        long_title = markup + ("A" * 200)
+        payload = {
+            "current": "https://grok.com/c/" + ("1" * 600),
+            "currentTitle": long_title,
+            "currentSection": "B" * 120,
+            "refreshed": True,
+            "chats": [
+                {
+                    "url": "https://grok.com/c/abc",
+                    "title": long_title,
+                    "section": "C" * 120,
+                    "note": "D" * 800,
+                }
+            ],
+            "preferredProject": {
+                "url": "https://grok.com/project/p",
+                "title": "E" * 120,
+                "section": "Sidepanel",
+            },
+        }
+        status, _, _ = self.request(
+            "POST",
+            "/state",
+            body=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 204)
+        saved = json.loads((self.state / "chats.json").read_text(encoding="utf-8"))
+        title = saved["chats"][0]["title"]
+        self.assertEqual(len(title), bridge.NAME_LIMIT)
+        self.assertTrue(title.startswith(markup))
+        self.assertTrue(title.endswith("…"))
+        self.assertEqual(len(saved["chats"][0]["section"]), bridge.NAME_LIMIT)
+        self.assertEqual(len(saved["chats"][0]["note"]), bridge.FIELD_LIMIT)
+        self.assertEqual(len(saved["currentTitle"]), bridge.NAME_LIMIT)
+        self.assertEqual(len(saved["currentSection"]), bridge.NAME_LIMIT)
+        self.assertLessEqual(len(saved["current"]), bridge.FIELD_LIMIT)
+        self.assertEqual(saved["preferredProject"]["section"], "Sidepanel")
+        self.assertEqual(len(saved["preferredProject"]["title"]), bridge.NAME_LIMIT)
+        self.assertIs(saved["refreshed"], True)
+
+    def test_clip_name_collapses_space_and_keeps_short_values(self):
+        self.assertEqual(bridge.clip_name("  hi   there "), "hi there")
+        self.assertEqual(bridge.clip_name("x" * 80), "x" * 80)
+        self.assertEqual(bridge.clip_name("x" * 81), ("x" * 79) + "…")
+        self.assertEqual(bridge.clip_name(None), "")
+        self.assertEqual(bridge.bound_field("  " + ("u" * 600)), "u" * bridge.FIELD_LIMIT)
+
+    def test_save_default_clips_remote_names(self):
+        import subprocess
+
+        data_home = Path(self.tmp.name) / "xdg"
+        script = Path(__file__).resolve().parent / "save-default.py"
+        env = dict(os.environ)
+        env["XDG_DATA_HOME"] = str(data_home)
+        subprocess.run(
+            [
+                "python3",
+                str(script),
+                "https://grok.com/c/" + ("a" * 600),
+                "T" * 200,
+                "S" * 200,
+            ],
+            check=True,
+            env=env,
+        )
+        saved = json.loads(
+            (data_home / "online.izz0.omarchy.grok-panel" / "default-chat.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(saved["title"], ("T" * 79) + "…")
+        self.assertEqual(saved["section"], ("S" * 79) + "…")
+        self.assertEqual(len(saved["url"]), bridge.FIELD_LIMIT)
+        self.assertTrue(saved["url"].startswith("https://grok.com/c/"))
+
 
 if __name__ == "__main__":
     unittest.main()

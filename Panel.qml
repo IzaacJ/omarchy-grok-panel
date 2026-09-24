@@ -36,6 +36,8 @@ Item {
   readonly property string pinOutline: "󰤱"
   readonly property string pinFilled: "󰐃"
   readonly property string refreshIcon: "󰑓"
+  readonly property int remoteNameLimit: 80
+  readonly property int remoteFieldLimit: 512
   property bool pickerOpen: false
   property var chatList: []
   property string defaultChatUrl: "https://grok.com"
@@ -247,29 +249,56 @@ Item {
     return s !== "" && s !== "Other chats" && s !== "Projects"
   }
 
+  function clipName(value) {
+    var text = String(value == null ? "" : value).replace(/\s+/g, " ").trim()
+    if (text.length <= root.remoteNameLimit) return text
+    return text.slice(0, root.remoteNameLimit - 1) + "…"
+  }
+
+  function clipField(value) {
+    var text = String(value == null ? "" : value).trim()
+    if (text.length <= root.remoteFieldLimit) return text
+    return text.slice(0, root.remoteFieldLimit)
+  }
+
+  function storedChat(item) {
+    if (!item || !item.url) return null
+    var url = root.clipField(item.url)
+    if (!url) return null
+    var row = {
+      url: url,
+      title: root.clipName(item.title)
+    }
+    var section = root.clipName(item.section)
+    if (section) row.section = section
+    if (item.id) row.id = root.clipField(item.id)
+    if (item.workspaceId) row.workspaceId = root.clipField(item.workspaceId)
+    return row
+  }
+
   function displayLabel(title, section) {
-    var label = String(title || "").trim() || "New chat"
-    var project = String(section || "").trim()
+    var label = root.clipName(title) || "New chat"
+    var project = root.clipName(section)
     if (root.isProjectSection(project)) return project + " \\ " + label
     return label
   }
 
   function lookupChat(url, title, section) {
-    var href = root.normalizeChatUrl(url)
-    var label = String(title || "").trim()
-    var proj = String(section || "").trim()
+    var href = root.clipField(root.normalizeChatUrl(url))
+    var label = root.clipName(title)
+    var proj = root.clipName(section)
     if (!href) return null
     for (var i = 0; i < root.chatList.length; i++) {
       var item = root.chatList[i]
       if (!item || !root.urlsMatch(item.url, href)) continue
       if (!label || label.indexOf("http://") === 0 || label.indexOf("https://") === 0)
-        label = String(item.title || "")
-      if (!proj) proj = String(item.section || "")
+        label = root.clipName(item.title)
+      if (!proj) proj = root.clipName(item.section)
       break
     }
     if (!label || label.indexOf("http://") === 0 || label.indexOf("https://") === 0) {
       if (root.isHomepage(href)) label = "New chat"
-      else label = href.replace(/^https:\/\/grok\.com\/c\//, "")
+      else label = root.clipName(href.replace(/^https:\/\/grok\.com\/c\//, ""))
     }
     return { url: href, title: label, section: proj }
   }
@@ -308,19 +337,19 @@ Item {
   }
 
   function applyRefreshedCurrent(data, list) {
-    var href = String((data && data.current) || "").split("?")[0].split("#")[0]
+    var href = root.clipField(String((data && data.current) || "").split("?")[0].split("#")[0])
     if (!href) return
-    var title = String((data && data.currentTitle) || "").trim()
-    var section = String((data && data.currentSection) || "").trim()
+    var title = root.clipName((data && data.currentTitle) || "")
+    var section = root.clipName((data && data.currentSection) || "")
     for (var i = 0; i < list.length; i++) {
       var item = list[i]
       if (!item || !root.urlsMatch(item.url, href)) continue
-      href = String(item.url || href)
-      if (item.title) title = String(item.title)
-      if (item.section) section = String(item.section)
+      href = root.clipField(item.url || href)
+      if (item.title) title = root.clipName(item.title)
+      if (item.section) section = root.clipName(item.section)
       break
     }
-    if (!title) title = root.isHomepage(href) ? "New chat" : href.replace(/^https:\/\/grok\.com\/c\//, "")
+    if (!title) title = root.isHomepage(href) ? "New chat" : root.clipName(href.replace(/^https:\/\/grok\.com\/c\//, ""))
     root.currentChatUrl = href
     root.currentChatTitle = title
     root.currentChatSection = section
@@ -372,22 +401,25 @@ Item {
       var list = data.chats || []
       var out = []
       for (var i = 0; i < list.length; i++) {
-        if (list[i] && list[i].url) out.push(list[i])
+        var row = root.storedChat(list[i])
+        if (row) out.push(row)
       }
       root.chatList = out
-      if (data.current) root.urlDraft = String(data.current)
-      if (data.preferredProject && data.preferredProject.url)
-        root.preferredProject = data.preferredProject
+      if (data.current) root.urlDraft = root.clipField(data.current)
+      if (data.preferredProject && data.preferredProject.url) {
+        var prefRow = root.storedChat(data.preferredProject)
+        if (prefRow) root.preferredProject = prefRow
+      }
       for (var j = 0; j < out.length; j++) {
         var item = out[j]
         if (!item) continue
         if (!root.defaultChatSection && root.urlsMatch(item.url, root.defaultChatUrl))
-          root.defaultChatSection = String(item.section || "")
+          root.defaultChatSection = root.clipName(item.section)
         if (!root.currentChatSection && root.urlsMatch(item.url, root.currentChatUrl || root.defaultChatUrl)) {
-          root.currentChatSection = String(item.section || "")
+          root.currentChatSection = root.clipName(item.section)
           if (!root.currentChatTitle || root.currentChatTitle === "New chat")
-            root.currentChatTitle = String(item.title || root.currentChatTitle)
-          if (!root.currentChatUrl) root.currentChatUrl = String(item.url || "")
+            root.currentChatTitle = root.clipName(item.title || root.currentChatTitle)
+          if (!root.currentChatUrl) root.currentChatUrl = root.clipField(item.url)
         }
       }
       if (data.refreshed)
@@ -402,11 +434,11 @@ Item {
     try {
       var data = JSON.parse(String(raw || "{}"))
       if (data.url) {
-        root.defaultChatUrl = String(data.url)
-        root.hasSavedDefault = !root.isHomepage(data.url)
+        root.defaultChatUrl = root.clipField(data.url)
+        root.hasSavedDefault = !root.isHomepage(root.defaultChatUrl)
       }
-      if (data.title) root.defaultChatTitle = String(data.title)
-      if (data.section) root.defaultChatSection = String(data.section)
+      if (data.title) root.defaultChatTitle = root.clipName(data.title)
+      if (data.section) root.defaultChatSection = root.clipName(data.section)
       if (!root.currentChatUrl || root.isHomepage(root.currentChatUrl)) {
         root.currentChatUrl = root.defaultChatUrl
         root.currentChatTitle = root.defaultChatTitle
@@ -726,6 +758,7 @@ Item {
         Text {
           Layout.fillWidth: true
           text: root.displayLabel(root.currentChatTitle || root.defaultChatTitle, root.currentChatSection || root.defaultChatSection)
+          textFormat: Text.PlainText
           elide: Text.ElideRight
           color: Color.popups.text
           font.family: Style.font.family
@@ -876,6 +909,7 @@ Item {
           width: ListView.view ? ListView.view.width : 0
           height: 22
           text: section
+          textFormat: Text.PlainText
           color: Color.popups.text
           opacity: 0.65
           font.pixelSize: 11
@@ -901,6 +935,7 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 text: modelData.title || modelData.url
+                textFormat: Text.PlainText
                 color: Color.popups.text
                 font.pixelSize: 12
                 font.bold: root.urlsMatch(modelData.url, root.currentChatUrl)

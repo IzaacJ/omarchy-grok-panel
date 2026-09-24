@@ -4,9 +4,11 @@ import os
 import sys
 from pathlib import Path
 
-url = (sys.argv[1] if len(sys.argv) > 1 else "").strip()
-title = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
-section = (sys.argv[3] if len(sys.argv) > 3 else "").strip()
+import bridge
+
+url = bridge.bound_field(sys.argv[1] if len(sys.argv) > 1 else "")
+title = bridge.clip_name(sys.argv[2] if len(sys.argv) > 2 else "")
+section = bridge.clip_name(sys.argv[3] if len(sys.argv) > 3 else "")
 state = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local/share")) / "online.izz0.omarchy.grok-panel"
 state.mkdir(parents=True, exist_ok=True)
 payload = {"url": url, "title": title}
